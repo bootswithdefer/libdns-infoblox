@@ -40,18 +40,18 @@ func (p *Provider) GetRecords(_ context.Context, zone string) ([]libdns.Record, 
 
 	var list []libdns.Record
 	for i := range cnameRecords {
-		list = append(list, libdns.Record{
-			Type:  "CNAME",
-			Name:  strings.TrimSuffix(*cnameRecords[i].Name, "."+legitzone),
-			Value: *cnameRecords[i].Canonical,
+		list = append(list, libdns.RR{
+			Type: "CNAME",
+			Name: strings.TrimSuffix(*cnameRecords[i].Name, "."+legitzone),
+			Data: *cnameRecords[i].Canonical,
 		})
 	}
 
 	for i := range txtRecords {
-		list = append(list, libdns.Record{
-			Type:  "TXT",
-			Name:  strings.TrimSuffix(*txtRecords[i].Name, "."+legitzone),
-			Value: *txtRecords[i].Text,
+		list = append(list, libdns.RR{
+			Type: "TXT",
+			Name: strings.TrimSuffix(*txtRecords[i].Name, "."+legitzone),
+			Data: *txtRecords[i].Text,
 		})
 	}
 
@@ -70,26 +70,28 @@ func (p *Provider) AppendRecords(_ context.Context, zone string, records []libdn
 	var legitzone = strings.TrimSuffix(zone, ".")
 
 	for i := range records {
-		switch records[i].Type {
+		var rec = records[i]
+		var recRR = rec.RR()
+		switch recRR.Type {
 		case "CNAME":
-			record, err := objMgr.CreateCNAMERecord("default", records[i].Value, records[i].Name+"."+legitzone, true, uint32(records[i].TTL.Seconds()), "", nil)
+			record, err := objMgr.CreateCNAMERecord("default", recRR.Data, recRR.Name+"."+legitzone, true, uint32(recRR.TTL.Seconds()), "", nil)
 			if err != nil {
 				continue
 			}
-			added = append(added, libdns.Record{
-				Type:  "CNAME",
-				Name:  strings.TrimSuffix(*record.Name, "."+legitzone),
-				Value: *record.Canonical,
+			added = append(added, libdns.RR{
+				Type: "CNAME",
+				Name: strings.TrimSuffix(*record.Name, "."+legitzone),
+				Data: *record.Canonical,
 			})
 		case "TXT":
-			record, err := objMgr.CreateTXTRecord("default", records[i].Name+"."+legitzone, records[i].Value, uint32(records[i].TTL.Seconds()), true, "", nil)
+			record, err := objMgr.CreateTXTRecord("default", recRR.Name+"."+legitzone, recRR.Data, uint32(recRR.TTL.Seconds()), true, "", nil)
 			if err != nil {
 				continue
 			}
-			added = append(added, libdns.Record{
-				Type:  "TXT",
-				Name:  strings.TrimSuffix(*record.Name, "."+legitzone),
-				Value: *record.Text,
+			added = append(added, libdns.RR{
+				Type: "TXT",
+				Name: strings.TrimSuffix(*record.Name, "."+legitzone),
+				Data: *record.Text,
 			})
 		}
 	}
@@ -110,42 +112,44 @@ func (p *Provider) SetRecords(_ context.Context, zone string, records []libdns.R
 	var legitzone = strings.TrimSuffix(zone, ".")
 
 	for i := range records {
-		switch records[i].Type {
+		var rec = records[i]
+		var recRR = rec.RR()
+		switch recRR.Type {
 		case "CNAME":
-			record, err := objMgr.GetCNAMERecord("default", "", records[i].Name)
+			record, err := objMgr.GetCNAMERecord("default", "", recRR.Name)
 			if err != nil {
-				record, err = objMgr.CreateCNAMERecord("default", records[i].Value, records[i].Name+"."+legitzone, true, uint32(records[i].TTL.Seconds()), "", nil)
+				record, err = objMgr.CreateCNAMERecord("default", recRR.Data, recRR.Name+"."+legitzone, true, uint32(recRR.TTL.Seconds()), "", nil)
 				if err != nil {
 					continue
 				}
 			} else {
-				_, err := objMgr.UpdateCNAMERecord(record.Ref, records[i].Value, *record.Name, *record.UseTtl, *record.Ttl, *record.Comment, record.Ea)
+				_, err := objMgr.UpdateCNAMERecord(record.Ref, recRR.Data, *record.Name, *record.UseTtl, *record.Ttl, *record.Comment, record.Ea)
 				if err != nil {
 					continue
 				}
 			}
-			updated = append(updated, libdns.Record{
-				Type:  "CNAME",
-				Name:  strings.TrimSuffix(*record.Name, "."+legitzone),
-				Value: *record.Canonical,
+			updated = append(updated, libdns.RR{
+				Type: "CNAME",
+				Name: strings.TrimSuffix(*record.Name, "."+legitzone),
+				Data: *record.Canonical,
 			})
 		case "TXT":
-			record, err := objMgr.GetTXTRecord("default", records[i].Name)
+			record, err := objMgr.GetTXTRecord("default", recRR.Name)
 			if err != nil {
-				record, err = objMgr.CreateTXTRecord("default", records[i].Name+"."+legitzone, records[i].Value, uint32(records[i].TTL.Seconds()), true, "", nil)
+				record, err = objMgr.CreateTXTRecord("default", recRR.Name+"."+legitzone, recRR.Data, uint32(recRR.TTL.Seconds()), true, "", nil)
 				if err != nil {
 					continue
 				}
 			} else {
-				record, err = objMgr.UpdateTXTRecord(record.Ref, *record.Name, records[i].Value, *record.Ttl, *record.UseTtl, *record.Comment, record.Ea)
+				record, err = objMgr.UpdateTXTRecord(record.Ref, *record.Name, recRR.Data, *record.Ttl, *record.UseTtl, *record.Comment, record.Ea)
 				if err != nil {
 					continue
 				}
 			}
-			updated = append(updated, libdns.Record{
-				Type:  "TXT",
-				Name:  strings.TrimSuffix(*record.Name, "."+legitzone),
-				Value: *record.Text,
+			updated = append(updated, libdns.RR{
+				Type: "TXT",
+				Name: strings.TrimSuffix(*record.Name, "."+legitzone),
+				Data: *record.Text,
 			})
 		}
 	}
@@ -165,9 +169,11 @@ func (p *Provider) DeleteRecords(_ context.Context, zone string, records []libdn
 	var legitzone = strings.TrimSuffix(zone, ".")
 
 	for i := range records {
-		switch records[i].Type {
+		var rec = records[i]
+		var recRR = rec.RR()
+		switch recRR.Type {
 		case "CNAME":
-			record, err := objMgr.GetCNAMERecord("default", "", records[i].Name+"."+legitzone)
+			record, err := objMgr.GetCNAMERecord("default", "", recRR.Name+"."+legitzone)
 			if err != nil {
 				continue
 			}
@@ -175,13 +181,13 @@ func (p *Provider) DeleteRecords(_ context.Context, zone string, records []libdn
 			if err != nil {
 				continue
 			}
-			deleted = append(deleted, libdns.Record{
-				Type:  "CNAME",
-				Name:  strings.TrimSuffix(*record.Name, "."+legitzone),
-				Value: *record.Canonical,
+			deleted = append(deleted, libdns.RR{
+				Type: "CNAME",
+				Name: strings.TrimSuffix(*record.Name, "."+legitzone),
+				Data: *record.Canonical,
 			})
 		case "TXT":
-			record, err := objMgr.GetTXTRecord("default", records[i].Name+"."+legitzone)
+			record, err := objMgr.GetTXTRecord("default", recRR.Name+"."+legitzone)
 			if err != nil {
 				continue
 			}
@@ -189,10 +195,10 @@ func (p *Provider) DeleteRecords(_ context.Context, zone string, records []libdn
 			if err != nil {
 				continue
 			}
-			deleted = append(deleted, libdns.Record{
-				Type:  "TXT",
-				Name:  strings.TrimSuffix(*record.Name, "."+legitzone),
-				Value: *record.Text,
+			deleted = append(deleted, libdns.RR{
+				Type: "TXT",
+				Name: strings.TrimSuffix(*record.Name, "."+legitzone),
+				Data: *record.Text,
 			})
 		}
 	}
