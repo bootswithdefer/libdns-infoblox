@@ -10,5 +10,18 @@ The following parameters are used to authenticate with the Infoblox API:
 * `Username` - The username to authenticate with
 * `Password` - The password to authenticate with
 
+## Logging
+This library supports Caddy-compatible logging via `go.uber.org/zap`. To enable logging, call `SetLogger()` on the provider instance with a zap logger. If no logger is set, logging is silently disabled.
+
+```go
+provider := &infoblox.Provider{
+    Host:     "infoblox.example.com",
+    Version:  "2.9.7",
+    Username: "admin",
+    Password: "password",
+}
+provider.SetLogger(logger) // Pass your zap.Logger instance
+```
+
 ## Supported Record Types
 I'm really only using this for ACME DNS-01 challenges, so only `TXT` and `CNAME` records are supported. Feel free to open a PR to add more record types.

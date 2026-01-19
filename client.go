@@ -1,8 +1,12 @@
 package infoblox
 
-import ibclient "github.com/infobloxopen/infoblox-go-client/v2"
+import (
+	ibclient "github.com/infobloxopen/infoblox-go-client/v2"
+	"go.uber.org/zap"
+)
 
 func (p *Provider) getConnector() (*ibclient.Connector, error) {
+	p.log().Debug("creating connector", zap.String("host", p.Host), zap.String("version", p.Version))
 	hostConfig := ibclient.HostConfig{
 		Scheme:  "https",
 		Host:    p.Host,
@@ -21,9 +25,11 @@ func (p *Provider) getConnector() (*ibclient.Connector, error) {
 
 	conn, err := ibclient.NewConnector(hostConfig, authConfig, transportConfig, requestBuilder, requestor)
 	if err != nil {
+		p.log().Error("failed to create connector", zap.Error(err))
 		return nil, err
 	}
 
+	p.log().Debug("connector created successfully")
 	return conn, nil
 }
 

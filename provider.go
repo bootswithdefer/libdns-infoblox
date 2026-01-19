@@ -5,6 +5,7 @@ import (
 	"fmt"
 	ibclient "github.com/infobloxopen/infoblox-go-client/v2"
 	"github.com/libdns/libdns"
+	"go.uber.org/zap"
 	"strings"
 )
 
@@ -14,12 +15,27 @@ type Provider struct {
 	Version  string `json:"version,omitempty"`
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
+	logger   *zap.Logger
+}
+
+// SetLogger sets the logger for the provider
+func (p *Provider) SetLogger(logger *zap.Logger) {
+	p.logger = logger
+}
+
+func (p *Provider) log() *zap.Logger {
+	if p.logger == nil {
+		return zap.NewNop()
+	}
+	return p.logger
 }
 
 // GetRecords lists all the records in the zone.
 func (p *Provider) GetRecords(_ context.Context, zone string) ([]libdns.Record, error) {
+	p.log().Info("getting records", zap.String("zone", zone))
 	conn, err := p.getConnector()
 	if err != nil {
+		p.log().Error("failed to get connector", zap.Error(err))
 		return nil, fmt.Errorf("failed to get connector: %w", err)
 	}
 	qp := ibclient.NewQueryParams(false, map[string]string{"name": zone})
@@ -27,12 +43,14 @@ func (p *Provider) GetRecords(_ context.Context, zone string) ([]libdns.Record, 
 	var cnameRecords []ibclient.RecordCNAME
 	err = conn.GetObject(&ibclient.RecordCNAME{}, "", qp, &cnameRecords)
 	if err != nil {
+		p.log().Error("failed to get CNAME records", zap.Error(err))
 		return nil, fmt.Errorf("failed to get CNAME records: %w", err)
 	}
 
 	var txtRecords []ibclient.RecordTXT
 	err = conn.GetObject(&ibclient.RecordTXT{}, "", qp, &txtRecords)
 	if err != nil {
+		p.log().Error("failed to get TXT records", zap.Error(err))
 		return nil, fmt.Errorf("failed to get TXT records: %w", err)
 	}
 
@@ -55,15 +73,18 @@ func (p *Provider) GetRecords(_ context.Context, zone string) ([]libdns.Record, 
 		})
 	}
 
+	p.log().Info("retrieved records", zap.String("zone", zone), zap.Int("count", len(list)))
 	return list, nil
 }
 
 // AppendRecords adds records to the zone. It returns the records that were added.
 func (p *Provider) AppendRecords(_ context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+	p.log().Info("appending records", zap.String("zone", zone), zap.Int("count", len(records)))
 	var added []libdns.Record
 
 	objMgr, err := p.getObjectManager()
 	if err != nil {
+		p.log().Error("failed to get object manager", zap.Error(err))
 		return nil, fmt.Errorf("failed to get object manager: %w", err)
 	}
 
@@ -76,6 +97,7 @@ func (p *Provider) AppendRecords(_ context.Context, zone string, records []libdn
 		case "CNAME":
 			record, err := objMgr.CreateCNAMERecord("default", recRR.Data, recRR.Name+"."+legitzone, true, uint32(recRR.TTL.Seconds()), "", nil)
 			if err != nil {
+				p.log().Warn("failed to create CNAME record", zap.String("name", recRR.Name), zap.Error(err))
 				continue
 			}
 			added = append(added, libdns.RR{
@@ -86,6 +108,7 @@ func (p *Provider) AppendRecords(_ context.Context, zone string, records []libdn
 		case "TXT":
 			record, err := objMgr.CreateTXTRecord("default", recRR.Name+"."+legitzone, recRR.Data, uint32(recRR.TTL.Seconds()), true, "", nil)
 			if err != nil {
+				p.log().Warn("failed to create TXT record", zap.String("name", recRR.Name), zap.Error(err))
 				continue
 			}
 			added = append(added, libdns.RR{
@@ -96,16 +119,19 @@ func (p *Provider) AppendRecords(_ context.Context, zone string, records []libdn
 		}
 	}
 
+	p.log().Info("appended records", zap.String("zone", zone), zap.Int("added", len(added)))
 	return added, nil
 }
 
 // SetRecords sets the records in the zone, either by updating existing records or creating new ones.
 // It returns the updated records.
 func (p *Provider) SetRecords(_ context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+	p.log().Info("setting records", zap.String("zone", zone), zap.Int("count", len(records)))
 	var updated []libdns.Record
 
 	objMgr, err := p.getObjectManager()
 	if err != nil {
+		p.log().Error("failed to get object manager", zap.Error(err))
 		return nil, fmt.Errorf("failed to get object manager: %w", err)
 	}
 
@@ -120,11 +146,13 @@ func (p *Provider) SetRecords(_ context.Context, zone string, records []libdns.R
 			if err != nil {
 				record, err = objMgr.CreateCNAMERecord("default", recRR.Data, recRR.Name+"."+legitzone, true, uint32(recRR.TTL.Seconds()), "", nil)
 				if err != nil {
+					p.log().Warn("failed to create CNAME record", zap.String("name", recRR.Name), zap.Error(err))
 					continue
 				}
 			} else {
 				_, err := objMgr.UpdateCNAMERecord(record.Ref, recRR.Data, *record.Name, *record.UseTtl, *record.Ttl, *record.Comment, record.Ea)
 				if err != nil {
+					p.log().Warn("failed to update CNAME record", zap.String("name", recRR.Name), zap.Error(err))
 					continue
 				}
 			}
@@ -138,11 +166,13 @@ func (p *Provider) SetRecords(_ context.Context, zone string, records []libdns.R
 			if err != nil {
 				record, err = objMgr.CreateTXTRecord("default", recRR.Name+"."+legitzone, recRR.Data, uint32(recRR.TTL.Seconds()), true, "", nil)
 				if err != nil {
+					p.log().Warn("failed to create TXT record", zap.String("name", recRR.Name), zap.Error(err))
 					continue
 				}
 			} else {
 				record, err = objMgr.UpdateTXTRecord(record.Ref, *record.Name, recRR.Data, *record.Ttl, *record.UseTtl, *record.Comment, record.Ea)
 				if err != nil {
+					p.log().Warn("failed to update TXT record", zap.String("name", recRR.Name), zap.Error(err))
 					continue
 				}
 			}
@@ -154,15 +184,18 @@ func (p *Provider) SetRecords(_ context.Context, zone string, records []libdns.R
 		}
 	}
 
+	p.log().Info("set records", zap.String("zone", zone), zap.Int("updated", len(updated)))
 	return updated, nil
 }
 
 // DeleteRecords deletes the records from the zone. It returns the records that were deleted.
 func (p *Provider) DeleteRecords(_ context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+	p.log().Info("deleting records", zap.String("zone", zone), zap.Int("count", len(records)))
 	var deleted []libdns.Record
 
 	objMgr, err := p.getObjectManager()
 	if err != nil {
+		p.log().Error("failed to get object manager", zap.Error(err))
 		return nil, fmt.Errorf("failed to get object manager: %w", err)
 	}
 
@@ -175,10 +208,12 @@ func (p *Provider) DeleteRecords(_ context.Context, zone string, records []libdn
 		case "CNAME":
 			record, err := objMgr.GetCNAMERecord("default", "", recRR.Name+"."+legitzone)
 			if err != nil {
+				p.log().Warn("failed to get CNAME record for deletion", zap.String("name", recRR.Name), zap.Error(err))
 				continue
 			}
 			_, err = objMgr.DeleteCNAMERecord(record.Ref)
 			if err != nil {
+				p.log().Warn("failed to delete CNAME record", zap.String("name", recRR.Name), zap.Error(err))
 				continue
 			}
 			deleted = append(deleted, libdns.RR{
@@ -189,10 +224,12 @@ func (p *Provider) DeleteRecords(_ context.Context, zone string, records []libdn
 		case "TXT":
 			record, err := objMgr.GetTXTRecord("default", recRR.Name+"."+legitzone)
 			if err != nil {
+				p.log().Warn("failed to get TXT record for deletion", zap.String("name", recRR.Name), zap.Error(err))
 				continue
 			}
 			_, err = objMgr.DeleteTXTRecord(record.Ref)
 			if err != nil {
+				p.log().Warn("failed to delete TXT record", zap.String("name", recRR.Name), zap.Error(err))
 				continue
 			}
 			deleted = append(deleted, libdns.RR{
@@ -203,6 +240,7 @@ func (p *Provider) DeleteRecords(_ context.Context, zone string, records []libdn
 		}
 	}
 
+	p.log().Info("deleted records", zap.String("zone", zone), zap.Int("deleted", len(deleted)))
 	return deleted, nil
 }
 
