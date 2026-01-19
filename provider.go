@@ -95,6 +95,7 @@ func (p *Provider) AppendRecords(_ context.Context, zone string, records []libdn
 		var recRR = rec.RR()
 		switch recRR.Type {
 		case "CNAME":
+			p.log().Debug("creating CNAME record", zap.String("name", recRR.Name), zap.String("data", recRR.Data), zap.Duration("ttl", recRR.TTL))
 			record, err := objMgr.CreateCNAMERecord("default", recRR.Data, recRR.Name+"."+legitzone, true, uint32(recRR.TTL.Seconds()), "", nil)
 			if err != nil {
 				p.log().Error("failed to create CNAME record", zap.String("name", recRR.Name), zap.Error(err))
@@ -106,6 +107,7 @@ func (p *Provider) AppendRecords(_ context.Context, zone string, records []libdn
 				Data: *record.Canonical,
 			})
 		case "TXT":
+			p.log().Debug("creating TXT record", zap.String("name", recRR.Name), zap.String("data", recRR.Data), zap.Duration("ttl", recRR.TTL))
 			record, err := objMgr.CreateTXTRecord("default", recRR.Name+"."+legitzone, recRR.Data, uint32(recRR.TTL.Seconds()), true, "", nil)
 			if err != nil {
 				p.log().Error("failed to create TXT record", zap.String("name", recRR.Name), zap.Error(err))
@@ -144,12 +146,14 @@ func (p *Provider) SetRecords(_ context.Context, zone string, records []libdns.R
 		case "CNAME":
 			record, err := objMgr.GetCNAMERecord("default", "", recRR.Name)
 			if err != nil {
+				p.log().Debug("creating CNAME record", zap.String("name", recRR.Name), zap.String("data", recRR.Data), zap.Duration("ttl", recRR.TTL))
 				record, err = objMgr.CreateCNAMERecord("default", recRR.Data, recRR.Name+"."+legitzone, true, uint32(recRR.TTL.Seconds()), "", nil)
 				if err != nil {
 					p.log().Error("failed to create CNAME record", zap.String("name", recRR.Name), zap.Error(err))
 					return updated, fmt.Errorf("failed to create CNAME record %s: %w", recRR.Name, err)
 				}
 			} else {
+				p.log().Debug("updating CNAME record", zap.String("name", recRR.Name), zap.String("data", recRR.Data), zap.Duration("ttl", recRR.TTL))
 				_, err := objMgr.UpdateCNAMERecord(record.Ref, recRR.Data, *record.Name, *record.UseTtl, *record.Ttl, *record.Comment, record.Ea)
 				if err != nil {
 					p.log().Error("failed to update CNAME record", zap.String("name", recRR.Name), zap.Error(err))
@@ -164,12 +168,14 @@ func (p *Provider) SetRecords(_ context.Context, zone string, records []libdns.R
 		case "TXT":
 			record, err := objMgr.GetTXTRecord("default", recRR.Name)
 			if err != nil {
+				p.log().Debug("creating TXT record", zap.String("name", recRR.Name), zap.String("data", recRR.Data), zap.Duration("ttl", recRR.TTL))
 				record, err = objMgr.CreateTXTRecord("default", recRR.Name+"."+legitzone, recRR.Data, uint32(recRR.TTL.Seconds()), true, "", nil)
 				if err != nil {
 					p.log().Error("failed to create TXT record", zap.String("name", recRR.Name), zap.Error(err))
 					return updated, fmt.Errorf("failed to create TXT record %s: %w", recRR.Name, err)
 				}
 			} else {
+				p.log().Debug("updating TXT record", zap.String("name", recRR.Name), zap.String("data", recRR.Data), zap.Duration("ttl", recRR.TTL))
 				record, err = objMgr.UpdateTXTRecord(record.Ref, *record.Name, recRR.Data, *record.Ttl, *record.UseTtl, *record.Comment, record.Ea)
 				if err != nil {
 					p.log().Error("failed to update TXT record", zap.String("name", recRR.Name), zap.Error(err))
@@ -206,6 +212,7 @@ func (p *Provider) DeleteRecords(_ context.Context, zone string, records []libdn
 		var recRR = rec.RR()
 		switch recRR.Type {
 		case "CNAME":
+			p.log().Debug("deleting CNAME record", zap.String("name", recRR.Name))
 			record, err := objMgr.GetCNAMERecord("default", "", recRR.Name+"."+legitzone)
 			if err != nil {
 				p.log().Error("failed to get CNAME record for deletion", zap.String("name", recRR.Name), zap.Error(err))
@@ -222,6 +229,7 @@ func (p *Provider) DeleteRecords(_ context.Context, zone string, records []libdn
 				Data: *record.Canonical,
 			})
 		case "TXT":
+			p.log().Debug("deleting TXT record", zap.String("name", recRR.Name))
 			record, err := objMgr.GetTXTRecord("default", recRR.Name+"."+legitzone)
 			if err != nil {
 				p.log().Error("failed to get TXT record for deletion", zap.String("name", recRR.Name), zap.Error(err))
