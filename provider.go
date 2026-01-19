@@ -20,7 +20,7 @@ type Provider struct {
 
 // SetLogger sets the logger for the provider
 func (p *Provider) SetLogger(logger *zap.Logger) {
-	p.logger = logger
+	p.logger = logger.With(zap.String("package", "libdns-infoblox"))
 }
 
 func (p *Provider) log() *zap.Logger {
